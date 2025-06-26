@@ -15,47 +15,19 @@ func handleIfError(err error) {
 	}
 }
 
-// func hardcodedResponse(id uint16) []byte {
-// 	base := []byte{
-// 		0x00, 0x00, // ID placeholder
-// 		0x81, 0x80, // Flags: response + recursion
-// 		0x00, 0x01, // QDCOUNT = 1
-// 		0x00, 0x01, // ANCOUNT = 1
-// 		0x00, 0x00, // NSCOUNT = 0
-// 		0x00, 0x00, // ARCOUNT = 0
-//
-// 		// Question: harish.com A IN
-// 		0x06, 'h', 'a', 'r', 'i', 's', 'h',
-// 		0x03, 'c', 'o', 'm',
-// 		0x00,
-// 		0x00, 0x01, // Type A
-// 		0x00, 0x01, // Class IN
-//
-// 		// Answer section
-// 		0xC0, 0x0C, // Pointer to offset 12 (name)
-// 		0x00, 0x01, // Type A
-// 		0x00, 0x01, // Class IN
-// 		0x00, 0x00, 0x00, 0x3C, // TTL = 60
-// 		0x00, 0x04,             // RDLENGTH = 4
-// 		0x7F, 0x00, 0x00, 0x01, // 127.0.0.1
-// 	}
-//
-// 	// Patch in the request ID
-// 	base[0] = byte(id >> 8)
-// 	base[1] = byte(id & 0xFF)
-//
-// 	return base
-// }
-
 func handleDNSQuery(conn *net.UDPConn, clientAddr *net.UDPAddr, msg []byte) {
+	var response []byte
 	header, question := parseDNSQuery(msg)
+
 	ipStr, found := records[question.Name]
 	if !found {
-		log.Println("Record doesn't exist", question.Name)
-		return
+		log.Printf("Record doesn't exists: %s. Sending NXDOMAIN\n", question.Name)
+		response = buildFailResponse(header, question)
+	} else {
+		ip := net.ParseIP(ipStr).To4()
+		response = buildResponse(header, question, ip)
 	}
-	ip := net.ParseIP(ipStr).To4()
-	response := buildResponse(header, question, ip)
+
 	log.Println("Sending response of", len(response), "bytes")
 	_, err := conn.WriteToUDP(response, clientAddr)
 	if err != nil {
@@ -67,7 +39,7 @@ func main() {
 	switch len(os.Args) {
 	case 1:
 		records = map[string]string {
-			"harish.com": "127.0.0.1",
+			"example.com": "127.0.0.1",
 		}
 	case 2:
 		ftxt, err := os.ReadFile(os.Args[1])
